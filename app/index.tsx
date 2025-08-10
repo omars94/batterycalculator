@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -201,6 +202,9 @@ export default function App() {
     return hrs < 0 ? Infinity : hrs;
   }, [remainingKWh, netKW]);
 
+  const canComputeFull = isFinite(timeToFullH) && timeToFullH >= 0;
+  const canComputeEmpty = isFinite(timeToEmptyH) && timeToEmptyH >= 0;
+
   const finishTimeCharge = useMemo(() => {
     if (!canComputeFull) return null;
     const date = new Date();
@@ -215,8 +219,40 @@ export default function App() {
     return formatTimeOfDay(date);
   }, [canComputeEmpty, timeToEmptyH]);
 
-  const canComputeFull = isFinite(timeToFullH) && timeToFullH >= 0;
-  const canComputeEmpty = isFinite(timeToEmptyH) && timeToEmptyH >= 0;
+  // Load saved settings on app start
+  React.useEffect(() => {
+    async function loadSettings() {
+      try {
+        const [capacity, reserve, max] = await Promise.all([
+          AsyncStorage.getItem("capacity"),
+          AsyncStorage.getItem("reserve"),
+          AsyncStorage.getItem("max"),
+        ]);
+        if (capacity) setCapacityStr(capacity);
+        if (reserve) setReserveStr(reserve);
+        if (max) setMaxStr(max);
+      } catch (e) {
+        console.warn("Failed to load settings:", e);
+      }
+    }
+    loadSettings();
+  }, []);
+
+  // Save settings when they change
+  React.useEffect(() => {
+    async function saveSettings() {
+      try {
+        await Promise.all([
+          AsyncStorage.setItem("capacity", capacityStr),
+          AsyncStorage.setItem("reserve", reserveStr),
+          AsyncStorage.setItem("max", maxStr),
+        ]);
+      } catch (e) {
+        console.warn("Failed to save settings:", e);
+      }
+    }
+    saveSettings();
+  }, [capacityStr, reserveStr, maxStr]);
 
   function bumpSOC(delta: number) {
     const next = clamp((parseFloat(socStr) || 0) + delta, 0, 100);
@@ -224,12 +260,21 @@ export default function App() {
   }
 
   function resetAll() {
-    setCapacityStr("15.33");
-    setSocStr("100");
-    setChargeStr("0");
-    setLoadStr("0");
-    setReserveStr("20");
-    setMaxStr("90");
+    const defaults = {
+      capacity: "15.33",
+      soc: "100",
+      charge: "0",
+      load: "0",
+      reserve: "20",
+      max: "90",
+    };
+
+    setCapacityStr(defaults.capacity);
+    setSocStr(defaults.soc);
+    setChargeStr(defaults.charge);
+    setLoadStr(defaults.load);
+    setReserveStr(defaults.reserve);
+    setMaxStr(defaults.max);
   }
 
   return (
